@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Romantic Cards</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: sans-serif;
+            background-color: #222;
+        }
+
+        /* Фоновое изображение */
+        #background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('bg.jpg');
+            background-size: cover;
+            background-position: center;
+            z-index: 1;
+        }
+
+        /* Затемнение (Overlay) */
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8); /* Чуть темнее для контраста */
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            z-index: 10; /* Слой затемнения */
+            backdrop-filter: blur(2px);
+        }
+
+        #overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Контейнер для карточек */
+        .cards-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            /* ВАЖНО: Убрали z-index у контейнера, чтобы активная карточка могла стать выше Overlay */
+            pointer-events: none; 
+        }
+
+        /* Сама карточка (обертка) */
+        .card-wrapper {
+            position: absolute;
+            width: 140px; 
+            height: 180px;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: all 0.8s cubic-bezier(0.25, 0.8, 0.25, 1);
+            perspective: 1000px;
+            z-index: 5; /* В обычном состоянии карточки ПОД затемнением (которое z:10) */
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+        }
+
+        /* Позиционирование карточек (настрой под свой bg.jpg) */
+        .card-wrapper:nth-child(1) { top: 25%; left: 10%; transform: rotate(-15deg); }
+        .card-wrapper:nth-child(2) { top: 15%; left: 40%; transform: rotate(5deg); }
+        .card-wrapper:nth-child(3) { top: 30%; right: 5%; transform: rotate(12deg); }
+        .card-wrapper:nth-child(4) { top: 60%; left: 15%; transform: rotate(-8deg); }
+        .card-wrapper:nth-child(5) { top: 55%; left: 50%; transform: rotate(20deg); }
+
+        /* Состояние открытой карточки */
+        .card-wrapper.active {
+            top: 50% !important;
+            left: 50% !important;
+            width: 85vw; /* Ширина почти во весь экран */
+            height: auto; /* Высота авто, чтобы сохранить пропорции */
+            aspect-ratio: 3/4; /* Принудительные пропорции фото */
+            max-width: 400px;
+            max-height: 80vh;
+            transform: translate(-50%, -50%) rotate(0deg) !important;
+            z-index: 100; /* ВАЖНО: Активная карточка ВЫШЕ затемнения */
+            filter: drop-shadow(0 20px 50px rgba(0,0,0,0.8));
+        }
+
+        /* Внутренняя часть для переворота */
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.8s;
+            transform-style: preserve-3d;
+        }
+
+        .card-wrapper.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        /* Лицевая и обратная стороны */
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 8px solid white; 
+            background: white;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        .card-front img, .card-back img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+        }
+
+        /* Кнопка переворота */
+        #flip-btn {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) scale(0);
+            background: #fff;
+            color: #222;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            z-index: 110; /* Выше активной карточки */
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+
+        #flip-btn.visible {
+            transform: translateX(-50%) scale(1);
+        }
+
+        /* Кнопка звука */
+        #music-control {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 50%;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+
+        #music-control:active {
+            transform: scale(0.9);
+        }
+
+    </style>
+</head>
+<body>
+
+    <audio id="bg-music" src="muzik.mp3" loop preload="auto"></audio>
+    <audio id="sfx" src="sound.mp3" preload="auto"></audio>
+
+    <div id="background"></div>
+    
+    <div id="music-control">🔇</div>
+    
+    <div id="overlay"></div>
+
+    <div class="cards-container">
+        
+        <div class="card-wrapper" data-id="1">
+            <div class="card-inner">
+                <div class="card-front"><img src="1_1.png" alt=""></div>
+                <div class="card-back"><img src="1_2.png" alt=""></div>
+            </div>
+        </div>
+
+        <div class="card-wrapper" data-id="2">
+            <div class="card-inner">
+                <div class="card-front"><img src="2_1.png" alt=""></div>
+                <div class="card-back"><img src="2_2.png" alt=""></div>
+            </div>
+        </div>
+
+        <div class="card-wrapper" data-id="3">
+            <div class="card-inner">
+                <div class="card-front"><img src="3_1.png" alt=""></div>
+                <div class="card-back"><img src="3_2.png" alt=""></div>
+            </div>
+        </div>
+
+        <div class="card-wrapper" data-id="4">
+            <div class="card-inner">
+                <div class="card-front"><img src="4_1.png" alt=""></div>
+                <div class="card-back"><img src="4_2.png" alt=""></div>
+            </div>
+        </div>
+
+        <div class="card-wrapper" data-id="5">
+            <div class="card-inner">
+                <div class="card-front"><img src="5_1.png" alt=""></div>
+                <div class="card-back"><img src="5_2.png" alt=""></div>
+            </div>
+        </div>
+
+    </div>
+
+    <button id="flip-btn">↺ Перевернуть</button>
+
+    <script>
+        const cards = document.querySelectorAll('.card-wrapper');
+        const overlay = document.getElementById('overlay');
+        const flipBtn = document.getElementById('flip-btn');
+        const bgMusic = document.getElementById('bg-music');
+        const sfx = document.getElementById('sfx');
+        const musicControl = document.getElementById('music-control');
+        
+        let activeCard = null;
+        let isMusicPlaying = false;
+
+        // Логика кнопки музыки
+        musicControl.addEventListener('click', (e) => {
+            e.stopPropagation(); // Чтобы клик не ушел на фон
+            toggleMusic();
+        });
+
+        function toggleMusic() {
+            if (bgMusic.paused) {
+                // Пытаемся запустить
+                bgMusic.volume = 0.5; // Громкость 50%
+                const playPromise = bgMusic.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        isMusicPlaying = true;
+                        musicControl.textContent = '🎵'; // Нота
+                        musicControl.style.background = '#ffd700'; // Желтый цвет когда играет
+                    })
+                    .catch(error => {
+                        console.log("Ошибка воспроизведения:", error);
+                    });
+                }
+            } else {
+                bgMusic.pause();
+                isMusicPlaying = false;
+                musicControl.textContent = '🔇';
+                musicControl.style.background = 'rgba(255,255,255,0.9)';
+            }
+        }
+
+        function playSfx() {
+            // Сбрасываем звук на начало, чтобы можно было быстро кликать
+            sfx.currentTime = 0;
+            sfx.play().catch(e => console.log("SFX error", e));
+        }
+
+        cards.forEach(card => {
+            card.addEventListener('click', (e) => {
+                e.stopPropagation(); // Важно: чтобы клик не ушел на overlay
+
+                if (card.classList.contains('active')) return;
+
+                if (activeCard) {
+                    closeActiveCard();
+                    // Небольшая задержка перед открытием новой, чтобы не было дергания
+                    setTimeout(() => openCard(card), 300);
+                } else {
+                    openCard(card);
+                }
+            });
+        });
+
+        function openCard(card) {
+            // Если музыка еще не играет и пользователь нажал на карточку - пробуем запустить музыку
+            if (!isMusicPlaying && bgMusic.paused) {
+                toggleMusic();
+            }
+
+            playSfx();
+            activeCard = card;
+            overlay.classList.add('active');
+            card.classList.add('active');
+            
+            setTimeout(() => {
+                flipBtn.classList.add('visible');
+            }, 600);
+        }
+
+        function closeActiveCard() {
+            if (!activeCard) return;
+
+            playSfx();
+            activeCard.classList.remove('active');
+            activeCard.classList.remove('flipped');
+            overlay.classList.remove('active');
+            flipBtn.classList.remove('visible');
+            activeCard = null;
+        }
+
+        // Кнопка переворота
+        flipBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (activeCard) {
+                playSfx();
+                activeCard.classList.toggle('flipped');
+            }
+        });
+
+        // Клик по затемнению закрывает карточку
+        overlay.addEventListener('click', () => {
+            closeActiveCard();
+        });
+
+    </script>
+</body>
+</html>
